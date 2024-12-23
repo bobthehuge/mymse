@@ -1,5 +1,5 @@
-CC = gcc
-CRELFLAGS = -std=c99
+CC = clang
+CRELFLAGS = -std=c99 -flto
 CDEVFLAGS = -pedantic -Werror -Wall -Wextra -Wvla -Wshadow -g
 LDLIBS = -lm -lraylib -lGL
 
@@ -12,7 +12,7 @@ EXE = mymsed
 all: setrel comp
 
 comp:
-	$(CC) -o $(EXE) $(CFLAGS) $(LDLIBS) $(SRC)
+	$(CC) -o $(EXE) $(SRC) $(CFLAGS) $(LDLIBS)
 rel: setrel comp
 dev: setdev comp
 run:
