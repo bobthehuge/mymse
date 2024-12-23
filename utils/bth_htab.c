@@ -56,9 +56,9 @@ uint32_t djb2(char *key)
     return hash;
 }
 
-struct htab *htab_init(size_t cap)
+struct bth_htab *bth_htab_init(size_t cap)
 {
-    struct htab *res = malloc(sizeof(struct htab));
+    struct bth_htab *res = malloc(sizeof(struct bth_htab));
 
     if (res == NULL)
     {
@@ -68,7 +68,7 @@ struct htab *htab_init(size_t cap)
     res->capacity = cap;
     res->size = 0;
 
-    res->data = calloc(cap, sizeof(struct htab_pair));
+    res->data = calloc(cap, sizeof(struct bth_htab_pair));
 
     if (res->data == NULL)
     {
@@ -78,21 +78,21 @@ struct htab *htab_init(size_t cap)
     return res;
 }
 
-struct htab *htab_new()
+struct bth_htab *bth_htab_new()
 {
-    return htab_init(4);
+    return bth_htab_init(4);
 }
 
-void htab_clear(struct htab *ht)
+void bth_htab_clear(struct bth_htab *ht)
 {
     for (size_t i = 0; i < ht->capacity; ++i)
     {
-        struct htab_pair *elt = ht->data[i].next;
+        struct bth_htab_pair *elt = ht->data[i].next;
         ht->data[i].next = NULL;
 
         while (elt != NULL)
         {
-            struct htab_pair *nxt = elt->next;
+            struct bth_htab_pair *nxt = elt->next;
             free(elt);
             elt = nxt;
         }
@@ -101,19 +101,19 @@ void htab_clear(struct htab *ht)
     ht->size = 0;
 }
 
-void htab_free(struct htab *ht)
+void bth_htab_free(struct bth_htab *ht)
 {
-    htab_clear(ht);
+    bth_htab_clear(ht);
     free(ht->data);
     free(ht);
 }
 
-struct htab_pair *htab_get(struct htab *ht, char *key)
+struct bth_htab_pair *bth_htab_get(struct bth_htab *ht, char *key)
 {
-    uint32_t h = HASH(key);
+    uint32_t h = BTH_HTAB_HASH(key);
     size_t idx = h % ht->capacity;
 
-    struct htab_pair *elt = ht->data[idx].next;
+    struct bth_htab_pair *elt = ht->data[idx].next;
 
     while (elt != NULL && strcmp(key, elt->key))
     {
@@ -123,13 +123,13 @@ struct htab_pair *htab_get(struct htab *ht, char *key)
     return elt;
 }
 
-struct htab_pair *htab_find(struct htab *ht, char *key, size_t *idx_ptr)
+struct bth_htab_pair *bth_htab_find(struct bth_htab *ht, char *key, size_t *idx_ptr)
 {
-    uint32_t h = HASH(key);
+    uint32_t h = BTH_HTAB_HASH(key);
     size_t hidx = h % ht->capacity;
     size_t bidx = 0;
 
-    struct htab_pair *elt = ht->data[hidx].next;
+    struct bth_htab_pair *elt = ht->data[hidx].next;
 
     while (elt != NULL && strcmp(key, elt->key))
     {
@@ -142,18 +142,18 @@ struct htab_pair *htab_find(struct htab *ht, char *key, size_t *idx_ptr)
     return elt;
 }
 
-void htab_expand(struct htab *ht)
+void bth_htab_expand(struct bth_htab *ht)
 {
-    struct htab *new = htab_init(ht->capacity * 2);
+    struct bth_htab *new = bth_htab_init(ht->capacity * 2);
 
     for (size_t i = 0; i < ht->capacity; ++i)
     {
-        struct htab_pair *elt = ht->data[i].next;
+        struct bth_htab_pair *elt = ht->data[i].next;
 
         while (elt != NULL)
         {
-            struct htab_pair *nxt = elt->next;
-            htab_insert(new, elt->key, elt->value);
+            struct bth_htab_pair *nxt = elt->next;
+            bth_htab_insert(new, elt->key, elt->value);
             free(elt);
             elt = nxt;
         }
@@ -164,22 +164,22 @@ void htab_expand(struct htab *ht)
     free(new);
 }
 
-int htab_insert(struct htab *ht, char *key, void *value)
+int bth_htab_insert(struct bth_htab *ht, char *key, void *value)
 {
-    uint32_t h = HASH(key);
+    uint32_t h = BTH_HTAB_HASH(key);
     size_t idx = h % ht->capacity;
 
-    if (htab_get(ht, key) != NULL)
+    if (bth_htab_get(ht, key) != NULL)
     {
         return 0;
     }
 
     if (ht->size * 100 / ht->capacity > 75)
     {
-        htab_expand(ht);
+        bth_htab_expand(ht);
     }
 
-    struct htab_pair *p = malloc(sizeof(struct htab_pair));
+    struct bth_htab_pair *p = malloc(sizeof(struct bth_htab_pair));
 
     if (ht->data[idx].next == NULL)
     {
@@ -196,12 +196,12 @@ int htab_insert(struct htab *ht, char *key, void *value)
     return 1;
 }
 
-void htab_remove(struct htab *ht, char *key)
+void bth_htab_remove(struct bth_htab *ht, char *key)
 {
-    uint32_t h = HASH(key);
+    uint32_t h = BTH_HTAB_HASH(key);
     size_t idx = h % ht->capacity;
 
-    struct htab_pair *elt = ht->data + idx;
+    struct bth_htab_pair *elt = ht->data + idx;
 
     if (elt == NULL)
     {
@@ -215,7 +215,7 @@ void htab_remove(struct htab *ht, char *key)
 
     if (elt->next != NULL)
     {
-        struct htab_pair *tofree = elt->next;
+        struct bth_htab_pair *tofree = elt->next;
         elt->next = elt->next->next;
 
         free(tofree);

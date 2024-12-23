@@ -1,7 +1,7 @@
 #ifndef CML_LEXER_H
 #define CML_LEXER_H
 
-#include "cml_token.h"
+#include "mse_token.h"
 
 #include "../utils/bth_dynarray.h"
 

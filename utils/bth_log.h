@@ -25,74 +25,87 @@
 
 #include <err.h>
 #include <stdio.h>
+#include <stdlib.h>
 
+#ifndef BTH_LOG_BUF_LEN
+#define BTH_LOG_BUF_LEN 1024
+#endif
+
+#ifndef BTH_LOG_BUF_DECL
+#define BTH_LOG_BUF_DECL \
+    static char __bth_log_buf[BTH_LOG_BUF_LEN] = {0};
+#endif
+
+#ifndef BTH_LOG_TXT_FMT
+#define BTH_LOG_TXT_FMT(fmt, ...) \
+    static char __bth_log_buf[BTH_LOG_BUF_LEN] = {0};\
+    memset(__bth_log_buf, 0, BTH_LOG_BUF_LEN);\
+    int ch = snprintf(__bth_log_buf, BTH_LOG_BUF_LEN, fmt, __VA_ARGS__);\
+    if (ch > BTH_LOG_BUF_LEN) {\
+        char *ptr = __bth_log_buf + BTH_LOG_BUF_LEN - 4;\
+        sprintf(ptr, "...");\
+    }
+#endif
 
 #ifndef NOLOG
-#define LOG(...) \
+#define LOG(fmt, ...) \
 {\
+    BTH_LOG_TXT_FMT(fmt, __VA_ARGS__);\
     fprintf(stderr, "[LOG] ");\
-    warn(__VA_ARGS__);\
-}
-
-#define LOGX(...) \
-{\
-    fprintf(stderr, "[LOG] ");\
-    warnx(__VA_ARGS__);\
+    warnx("%s : %s : %d => %s",\
+        __FILE__, __func__, __LINE__, __bth_log_buf);\
 }
 #endif
 
 #ifndef NOWARN
-#define WARN(...) \
+#define WARN(fmt, ...) \
 {\
-    fprintf(\
-        stderr,\
-        "[WARNING] at '%s':'%s': %d\n-> ",\
-        __FILE__, __func__, __LINE__);\
-    warn(__VA_ARGS__);\
+    BTH_LOG_TXT_FMT(fmt, __VA_ARGS__);\
+    fprintf(stderr, "[WARN] ");\
+    warn("%s : %s : %d => %s",\
+        __FILE__, __func__, __LINE__, __bth_log_buf);\
 }
 
-#define WARNX(...) \
+#define WARNX(fmt, ...) \
 {\
-    fprintf(\
-        stderr,\
-        "[WARNING] at '%s':'%s': %d\n-> ",\
-        __FILE__, __func__, __LINE__);\
-    warnx(__VA_ARGS__);\
+    BTH_LOG_TXT_FMT(fmt, __VA_ARGS__);\
+    fprintf(stderr, "[WARN] ");\
+    warnx("%s : %s : %d => %s",\
+        __FILE__, __func__, __LINE__, __bth_log_buf);\
 }
 #endif
 
 #ifndef NOERR
-#define ERR(...) \
+#define ERR(code, fmt, ...) \
 {\
-    fprintf(\
-        stderr,\
-        "[FATAL] at '%s':'%s': %d\n-> ",\
-        __FILE__, __func__, __LINE__\
-    );\
-    err(__VA_ARGS__);\
+    BTH_LOG_TXT_FMT(fmt, __VA_ARGS__);\
+    fprintf(stderr, "[FATAL] ");\
+    err(code, "%s : %s : %d => %s",\
+        __FILE__, __func__, __LINE__, __bth_log_buf);\
 }
 
-#define ERRX(...) \
+#define ERRX(code, fmt, ...) \
 {\
-    fprintf(\
-        stderr,\
-        "[FATAL] at '%s':'%s': %d\n-> ",\
-        __FILE__, __func__, __LINE__);\
-    errx(__VA_ARGS__);\
+    BTH_LOG_TXT_FMT(fmt, __VA_ARGS__);\
+    fprintf(stderr, "[FATAL] ");\
+    errx(code, "%s : %s : %d => %s",\
+        __FILE__, __func__, __LINE__, __bth_log_buf);\
 }
+
 #endif
 
 #ifndef NOTODO
-#define TODOX(...) \
-{\
-    fprintf(\
-        stderr,\
-        "[TODO] at '%s':'%s': %d\n-> ",\
-        __FILE__, __func__, __LINE__);\
-    errx(__VA_ARGS__);\
-}
+#define TODO() ERRX(1, "%s", "todo!")
+#endif
 
-#define TODO() TODOX(1, "todo!")
+#ifndef NOTRACE
+#define TRACE(label, fmt, ...) \
+{\
+    BTH_LOG_TXT_FMT(fmt, __VA_ARGS__);\
+    fprintf(stderr, "%s ", label);\
+    warnx("%s : %s : %d => %s",\
+        __FILE__, __func__, __LINE__, __bth_log_buf);\
+}
 #endif
 
 #endif /* ! */
