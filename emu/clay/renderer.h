@@ -12,7 +12,6 @@ typedef struct
     uint32_t fontId;
     Font font;
 } Raylib_Font;
-
  
 typedef enum
 {
@@ -40,7 +39,11 @@ Ray GetScreenToWorldPointWithZDistance(
     int screenHeight, float zDistance
 );
 
-static inline Clay_Dimensions Raylib_MeasureText(
+extern Raylib_Font Raylib_fonts[10];
+extern Camera Raylib_camera;
+
+// static inline Clay_Dimensions Raylib_MeasureText(
+Clay_Dimensions Raylib_MeasureText(
     Clay_String *text, Clay_TextElementConfig *config
 );
 

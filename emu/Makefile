@@ -1,7 +1,7 @@
 CC = clang
 CRELFLAGS = -std=c99 -flto
-CDEVFLAGS = -pedantic -Werror -Wall -Wextra -Wvla -Wshadow -g
-LDLIBS = -lm -lraylib -lGL
+CDEVFLAGS = -std=c99 -g
+LDLIBS = -lm -lraylib -lGL -lc
 
 SRC = `find . ../utils -name '*.c'`
 OBJ = `find . ../utils -name '*.o'`

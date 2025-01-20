@@ -65,7 +65,7 @@ Ray GetScreenToWorldPointWithZDistance(Vector2 position, Camera camera, int scre
 
 uint32_t measureCalls = 0;
 
-static inline Clay_Dimensions Raylib_MeasureText(Clay_String *text, Clay_TextElementConfig *config) {
+Clay_Dimensions Raylib_MeasureText(Clay_String *text, Clay_TextElementConfig *config) {
     measureCalls++;
     // Measure string size for Font
     Clay_Dimensions textSize = { 0 };
@@ -115,11 +115,26 @@ void Clay_RaylibRender(Clay_RenderCommandArray renderCommands)
             case CLAY_RENDER_COMMAND_TYPE_TEXT: {
                 // Raylib uses standard C strings so isn't compatible with cheap slices, we need to clone the string to append null terminator
                 Clay_String text = renderCommand->text;
+
                 char *cloned = (char *)malloc(text.length + 1);
                 memcpy(cloned, text.chars, text.length);
                 cloned[text.length] = '\0';
-                Font fontToUse = Raylib_fonts[renderCommand->config.textElementConfig->fontId].font;
-                DrawTextEx(fontToUse, cloned, (Vector2){boundingBox.x, boundingBox.y}, (float)renderCommand->config.textElementConfig->fontSize, (float)renderCommand->config.textElementConfig->letterSpacing, CLAY_COLOR_TO_RAYLIB_COLOR(renderCommand->config.textElementConfig->textColor));
+
+                Font fontToUse =
+                    Raylib_fonts
+                        [renderCommand->config.textElementConfig->fontId].font;
+
+                DrawTextEx(
+                    fontToUse,
+                    cloned,
+                    (Vector2) { boundingBox.x, boundingBox.y },
+                    (float) renderCommand->config.textElementConfig->fontSize,
+                    (float) renderCommand->config.textElementConfig
+                        ->letterSpacing,
+                    CLAY_COLOR_TO_RAYLIB_COLOR(
+                        renderCommand->config.textElementConfig->textColor
+                    )
+                );
                 free(cloned);
                 break;
             }
@@ -173,26 +188,115 @@ void Clay_RaylibRender(Clay_RenderCommandArray renderCommands)
                     DrawRing((Vector2) { roundf(boundingBox.x + config->cornerRadius.topLeft), roundf(boundingBox.y + config->cornerRadius.topLeft) }, roundf(config->cornerRadius.topLeft - config->top.width), config->cornerRadius.topLeft, 180, 270, 10, CLAY_COLOR_TO_RAYLIB_COLOR(config->top.color));
                 }
                 if (config->cornerRadius.topRight > 0) {
-                    DrawRing((Vector2) { roundf(boundingBox.x + boundingBox.width - config->cornerRadius.topRight), roundf(boundingBox.y + config->cornerRadius.topRight) }, roundf(config->cornerRadius.topRight - config->top.width), config->cornerRadius.topRight, 270, 360, 10, CLAY_COLOR_TO_RAYLIB_COLOR(config->top.color));
+                    DrawRing(
+                        (Vector2) { 
+                            roundf(
+                                boundingBox.x + boundingBox.width 
+                                    - config->cornerRadius.topRight
+                            ),
+                            roundf(
+                                boundingBox.y + config->cornerRadius.topRight
+                            ) 
+                        },
+                        roundf(
+                            config->cornerRadius.topRight
+                                - config->top.width
+                        ),
+                        config->cornerRadius.topRight,
+                        270,
+                        360,
+                        10,
+                        CLAY_COLOR_TO_RAYLIB_COLOR(config->top.color)
+                    );
                 }
                 if (config->cornerRadius.bottomLeft > 0) {
-                    DrawRing((Vector2) { roundf(boundingBox.x + config->cornerRadius.bottomLeft), roundf(boundingBox.y + boundingBox.height - config->cornerRadius.bottomLeft) }, roundf(config->cornerRadius.bottomLeft - config->top.width), config->cornerRadius.bottomLeft, 90, 180, 10, CLAY_COLOR_TO_RAYLIB_COLOR(config->bottom.color));
+                    DrawRing(
+                        (Vector2) { 
+                            roundf(
+                                boundingBox.x + config->cornerRadius.bottomLeft
+                            ),
+                            roundf(
+                                boundingBox.y + boundingBox.height 
+                                    - config->cornerRadius.bottomLeft
+                            ) 
+                        }, 
+                        roundf(
+                            config->cornerRadius.bottomLeft
+                                - config->top.width
+                        ),
+                        config->cornerRadius.bottomLeft,
+                        90,
+                        180,
+                        10,
+                        CLAY_COLOR_TO_RAYLIB_COLOR(config->bottom.color)
+                    );
                 }
                 if (config->cornerRadius.bottomRight > 0) {
-                    DrawRing((Vector2) { roundf(boundingBox.x + boundingBox.width - config->cornerRadius.bottomRight), roundf(boundingBox.y + boundingBox.height - config->cornerRadius.bottomRight) }, roundf(config->cornerRadius.bottomRight - config->bottom.width), config->cornerRadius.bottomRight, 0.1, 90, 10, CLAY_COLOR_TO_RAYLIB_COLOR(config->bottom.color));
+                    DrawRing(
+                        (Vector2) {
+                            roundf(
+                                boundingBox.x + boundingBox.width 
+                                    - config->cornerRadius.bottomRight
+                            ),
+                            roundf(
+                                boundingBox.y + boundingBox.height
+                                    - config->cornerRadius.bottomRight
+                            ) 
+                        },
+                        roundf(
+                            config->cornerRadius.bottomRight 
+                                - config->bottom.width
+                        ),
+                        config->cornerRadius.bottomRight,
+                        0.1,
+                        90,
+                        10,
+                        CLAY_COLOR_TO_RAYLIB_COLOR(config->bottom.color)
+                    );
                 }
                 break;
             }
             case CLAY_RENDER_COMMAND_TYPE_CUSTOM: {
-                CustomLayoutElement *customElement = (CustomLayoutElement *)renderCommand->config.customElementConfig->customData;
+                CustomLayoutElement *customElement = 
+                    (CustomLayoutElement *)renderCommand
+                        ->config.customElementConfig->customData;
+
                 if (!customElement) continue;
+
                 switch (customElement->type) {
                     case CUSTOM_LAYOUT_ELEMENT_TYPE_3D_MODEL: {
-                        Clay_BoundingBox rootBox = renderCommands.internalArray[0].boundingBox;
-                        float scaleValue = CLAY__MIN(CLAY__MIN(1, 768 / rootBox.height) * CLAY__MAX(1, rootBox.width / 1024), 1.5f);
-                        Ray positionRay = GetScreenToWorldPointWithZDistance((Vector2) { renderCommand->boundingBox.x + renderCommand->boundingBox.width / 2, renderCommand->boundingBox.y + (renderCommand->boundingBox.height / 2) + 20 }, Raylib_camera, (int)roundf(rootBox.width), (int)roundf(rootBox.height), 140);
+                        Clay_BoundingBox rootBox = 
+                            renderCommands.internalArray[0].boundingBox;
+
+                        float scaleValue = CLAY__MIN(
+                            CLAY__MIN(1, 768 / rootBox.height)
+                                * CLAY__MAX(1, rootBox.width / 1024), 
+                            1.5f
+                        );
+
+                        Ray positionRay = 
+                            GetScreenToWorldPointWithZDistance(
+                                (Vector2) { 
+                                    renderCommand->boundingBox.x
+                                        + renderCommand->boundingBox.width / 2,
+                                    renderCommand->boundingBox.y 
+                                        + (renderCommand->boundingBox.height 
+                                           / 2) + 20 
+                                }, 
+                                Raylib_camera,
+                                (int)roundf(rootBox.width),
+                                (int)roundf(rootBox.height), 140
+                            );
+
                         BeginMode3D(Raylib_camera);
-                            DrawModel(customElement->model.model, positionRay.position, customElement->model.scale * scaleValue, WHITE);        // Draw 3d model with texture
+
+                        DrawModel(
+                            customElement->model.model,
+                            positionRay.position,
+                            customElement->model.scale * scaleValue,
+                            WHITE
+                        ); // Draw 3d model with texture
+
                         EndMode3D();
                         break;
                     }

@@ -20,61 +20,68 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
 // DEALINGS IN THE SOFTWARE.
 
-#ifndef BTH_IO_H
-#define BTH_IO_H
+#ifndef BTH_STRING_H
+#define BTH_STRING_H
 
-#include <stdio.h>
 #include <stdlib.h>
 
-#ifndef BTH_IO_ERRX
-#include <err.h>
-#define BTH_IO_WARNX(fmt, ...) warnx(fmt, __VA_ARGS__)
+#ifndef BTH_STRING_ALLOC
+#define BTH_STRING_ALLOC(n) malloc(n)
 #endif
 
-#ifndef BTH_IO_ALLOC
-#define BTH_IO_ALLOC(n) malloc(n)
-#endif
+#ifdef BTH_STRING_IMPLEMENTATION
 
-#ifndef BTH_IO_FREE
-#define BTH_IO_FREE(p) free(p)
-#endif
-
-size_t readfn(char **buf, size_t n, const char *path);
-
-#ifdef BTH_IO_IMPLEMENTATION
-
-// reads `n` bytes from file at `path` to `buf`
+// get n '\n' terminated string from buf
 //
-// returns bytes counted by `fread`
-// if `buf` points to NULL, it is allocated dynamically
-// if `n` is 0, reads the entire file
+// returns char pointer array to each beginning of line
+// if `n` points to nothing, return all lines
+// else get all lines and put the line count to the pointed `n`
 //
-size_t readfn(char **buf, size_t n, const char *path)
+char **getnlines(char *_buf, size_t *_n)
 {
-    FILE *f = fopen(path, "r");
+    char *buf = _buf;
+    size_t n = _n ? *_n : 0;
+    char c = 0;
 
-    if (!f)
-        return 0;
-
-    size_t len = n;
     if (!n)
-    {
-        fseek(f, 0, SEEK_END);
-        len = ftell(f);
-        fseek(f, 0, SEEK_SET);
-    }
+        while ((c = *buf++))
+            if (c == '\n')
+                n++;
 
-    char *d = *buf;
-    if (!d)
-        d = (char *)BTH_IO_ALLOC(len);
+    buf = _buf;
 
-    size_t count = fread(d, 1, len, f) - 1;
-    fclose(f);
+    char **lines = BTH_STRING_ALLOC(n * sizeof(char *));
 
-    d[count] = 0;
-    *buf = d;
+    if (!lines)
+        return NULL;
 
-    return count;
+    lines[0] = buf;
+    size_t n2 = 1;
+
+    while (n2 <= n && (c = *buf++))
+        if (c == '\n')
+        {
+            lines[n2] = buf;
+            n2++;
+        }
+
+    if (_n)
+        *_n = n2;
+
+    return lines;
+}
+
+// searches `c` from `end` to `start`. Doesn't check for `end` > `start`
+// 
+// returns `start` if `c` isn't found
+// 
+char *findrchr(char *_end, char *start, int chr)
+{
+    char *end = _end;
+    int c = 0;
+
+    while (end > start && *end-- != chr) {}
+    return end;
 }
 
 #endif

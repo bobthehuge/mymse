@@ -11,6 +11,8 @@
     See the examples folder for details.
 */
 
+#include <raylib.h>
+
 #include "stdint.h"
 #include "stdbool.h"
 #include "stddef.h"
@@ -154,9 +156,11 @@ typedef struct {
     float width, height;
 } Clay_Dimensions;
 
-typedef struct {
-    float x, y;
-} Clay_Vector2;
+// typedef struct {
+//     float x, y;
+// } Clay_Vector2;
+
+typedef Vector2 Clay_Vector2;
 
 typedef struct {
     float r, g, b, a;
