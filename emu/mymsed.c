@@ -57,7 +57,6 @@ typedef struct {
     Vector2 mousePosition;
     Vector2 scrollDelta;
     size_t frameCount;
-    // bool isCapturing;
     My_Focus focus;
     bool shouldClose;
     bool debugMode;
@@ -125,7 +124,9 @@ void My_InitUi(void)
         .fontId = FONT_ID_BODY
     };
 
+    SetWindowMonitor(0);
     SetExitKey(KEY_NULL);
+
     SetTraceLogLevel(LOG_ALL);
 }
 
@@ -287,6 +288,14 @@ void My_TextBoxCaptureInput(My_TextBox *textBox)
             && textBox->cursor % textBox->lineFold == 0)
             __TextBoxDeleteChar(textBox);
     }
+    else if (key == KEY_LEFT && textBox->cursor > 0)
+    {
+        textBox->cursor--;
+    }
+    else if (key == KEY_RIGHT && textBox->cursor < textBox->textLen)
+    {
+        textBox->cursor++;
+    }
 }
 
 static inline void My_InputHandler(void)
@@ -300,9 +309,7 @@ static inline void My_InputHandler(void)
         int key = GetKeyPressed();
 
         uiStates.shouldClose = WindowShouldClose() || key == KEY_ESCAPE;
-
-        // if (IsKeyPressed(KEY_F2))
-            uiStates.debugMode ^= IsKeyPressed(KEY_F2);
+        uiStates.debugMode ^= IsKeyPressed(KEY_F2);
     }
 }
 
@@ -319,7 +326,7 @@ static inline void My_UpdateUiStates(void)
 int main(void)
 {
     My_InitUi();
-    My_TextBoxInit(&memView, 1024);
+    My_TextBoxInit(&memView, M68K_MEM * 2);
     
     char *text = NULL;
     size_t textLen = readfn(&text, 0, "../samples/sample2.srec");
@@ -330,6 +337,9 @@ int main(void)
     CPU.mem = cpuMem;
 
     int flashed = m68k_flash(&CPU, lines, linesCount);
+
+    fdumpf(memView.buffer, (char *)cpuMem, 100);
+    memView.textLen = 200;
 
     while (!uiStates.shouldClose)
     {
@@ -380,7 +390,8 @@ int main(void)
                             .fontId = FONT_ID_BODY,
                             .fontSize = 24,
                             .textColor = CLAYCOLOR(RAYWHITE),
-                            .wrapMode = CLAY_TEXT_WRAP_NEWLINES
+                            .wrapMode = CLAY_TEXT_WRAP_NEWLINES,
+                            .letterSpacing = 0
                         })
                     )
                 ) {}
@@ -388,8 +399,25 @@ int main(void)
         }
         Clay_RenderCommandArray layout = Clay_EndLayout();
 
+        Vector2 textSize = MeasureTextEx(
+            Raylib_fonts[FONT_ID_BODY].font,
+            "0123456789ABCDEF",
+            24, 0
+        );
+
+        textSize.x /= 16;
+
         BeginDrawing();
+
         Clay_RaylibRender(layout);
+
+        DrawRectangle(
+            8 + (memView.cursor - memView.lineStart) * textSize.x,
+            31 + 8 + (memView.cursor / memView.lineFold) * textSize.y,
+            2,
+            15,
+            RED
+        );
 
         EndDrawing();
         uiStates.frameCount++;

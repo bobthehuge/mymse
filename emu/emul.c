@@ -21,6 +21,20 @@ static inline uint8_t *strndecode(const char *data, int n)
     return m;
 }
 
+// encode raw hex `data` (`n` bytes long) to ascii hex in `dst` 
+// (need to be at least `n` * 2 bytes long)
+void fdumpf(char *dst, const char *data, int n)
+{
+    for (int i = 0; i < n; i++)
+    {
+        uint8_t h = (data[i] & 0xF0) >> 4;
+        uint8_t l = data[i] & 0x0F;
+
+        dst[i*2] = h <= 9 ? (h + '0') : (h - 10 + 'A');
+        dst[i*2+1] = l <= 9 ? (l + '0') : (l - 10 + 'A');
+    }
+}
+
 Record srec_decode(char *_d)
 {
     Record r = {

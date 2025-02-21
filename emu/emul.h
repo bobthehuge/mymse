@@ -85,5 +85,9 @@ int m68k_flash(m68k_cpu *cpu, char **lines, size_t n);
 // result is calloc'ed and is `n`/2 bytes long
 Record srec_decode(char *_d);
 
+// encode raw hex `data` (`n` bytes long) to ascii hex in `dst` 
+// (at least `n` * 2 bytes long)
+void fdumpf(char *dst, const char *data, int n);
+
 // computes the checksum of `r` and compares it to `r.checksum`
 int check_record(Record r);
