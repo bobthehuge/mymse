@@ -83,7 +83,7 @@ int m68k_flash(m68k_cpu *cpu, char **lines, size_t n);
 // to an actual hexadecimal char array
 //
 // result is calloc'ed and is `n`/2 bytes long
-Record srec_decode(char *_d);
+Record srec_decode(char *d);
 
 // encode raw hex `data` (`n` bytes long) to ascii hex in `dst` 
 // (at least `n` * 2 bytes long)

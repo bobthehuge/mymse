@@ -140,6 +140,7 @@ size_t m68k_dump2mem(m68k_cpu *cpu, char **lines, size_t n)
             return i;
         
         memcpy(cpu->mem + r.address, r.data, r.len);
+        free(r.data);
     }
 
     return i;
@@ -156,6 +157,10 @@ int m68k_flash(m68k_cpu *cpu, char **lines, size_t n)
     }
 
     return d == n;
+}
+
+inline void m68k_get_vector(m68k_cpu *cpu)
+{
 }
 
 inline void m68k_cycle(m68k_cpu *cpu)

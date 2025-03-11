@@ -1,5 +1,5 @@
 CC = clang
-CRELFLAGS = -std=c99 -flto
+CRELFLAGS = -std=c99
 CDEVFLAGS = -std=c99 -g
 LDLIBS = -lm -lraylib -lGL -lc
 
