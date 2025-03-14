@@ -18,24 +18,12 @@ int main(void)
     readfn(&text, 0, "../samples/sample2.srec");
     size_t line_cnt = 0;
     char **lines = getnlines(text, &line_cnt);
-    m68k_flash(&CPU, lines, line_cnt);
 
-    FILE *dd = fopen("dump", "w+");
+    m68k_trymemflash(&CPU, lines, line_cnt);
 
-    for (size_t i = 0; i < M68K_MEM / 32; i++)
-    {
-        char line[64];
-        fdumpf(line, (char *)(CPU.mem + i * 32), 32);
-        for (int j = 0; j < 7; j++)
-        {
-            fwrite(line + j * 8, 1, 8, dd);
-            fputc(' ', dd);
-        }
-        fwrite(line + 56, 1, 8, dd);
-        fputc('\n', dd);
-    }
-
-    fclose(dd);
+    FILE *fd = fopen("dump", "w+");
+    m68k_memdump(&CPU, fd);
+    fclose(fd);
 
     free(lines);
     free(text);

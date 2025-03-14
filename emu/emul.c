@@ -1,8 +1,7 @@
-#include <stdlib.h>
-#include <string.h>
-
 #include "emul.h"
 
+// decode ascii hex `data` and returns decoded raw hex
+// results is `n` / 2 bytes long and allocated using calloc
 static inline uint8_t *strndecode(const char *data, int n)
 {
     uint8_t *m = EMUL_CALLOC(n / 2, 1);
@@ -23,7 +22,7 @@ static inline uint8_t *strndecode(const char *data, int n)
 
 // encode raw hex `data` (`n` bytes long) to ascii hex in `dst` 
 // (need to be at least `n` * 2 bytes long)
-void fdumpf(char *dst, const char *data, int n)
+static inline void strnencode(char *dst, const char *data, int n)
 {
     for (int i = 0; i < n; i++)
     {
@@ -32,6 +31,23 @@ void fdumpf(char *dst, const char *data, int n)
 
         dst[i*2] = h <= 9 ? (h + '0') : (h - 10 + 'A');
         dst[i*2+1] = l <= 9 ? (l + '0') : (l - 10 + 'A');
+    }
+}
+
+// encodes and dumps mem to fd (using strnencode)
+void m68k_memdump(m68k_cpu *cpu, FILE *fd)
+{
+    for (size_t i = 0; i < M68K_MEM / 32; i++)
+    {
+        char line[64];
+        strnencode(line, (char *)(cpu->mem + i * 32), 32);
+        for (int j = 0; j < 7; j++)
+        {
+            fwrite(line + j * 8, 1, 8, fd);
+            fputc(' ', fd);
+        }
+        fwrite(line + 56, 1, 8, fd);
+        fputc('\n', fd);
     }
 }
 
@@ -62,7 +78,7 @@ Record srec_decode(char *_d)
     uint8_t *decoded = strndecode(d, 2);
     r.count = *decoded;
     r.len = *decoded - 1;
-    free(decoded);
+    EMUL_FREE(decoded);
 
     if (r.len < 2)
     {
@@ -80,7 +96,7 @@ Record srec_decode(char *_d)
     r.address |= decoded[2] << 8;
     r.address |= decoded[3];
 
-    free(decoded);
+    EMUL_FREE(decoded);
 
     switch (r.type)
     {
@@ -107,11 +123,12 @@ Record srec_decode(char *_d)
     decoded = strndecode(d + r.len * 2, 2);
     r.checksum = *decoded;
 
-    free(decoded);
+    EMUL_FREE(decoded);
 
     return r;
 }
 
+// computes the checksum of `r` and compares it to `r.checksum`
 int check_record(Record r)
 {
     uint32_t sum = r.count;
@@ -127,7 +144,10 @@ int check_record(Record r)
     return r.checksum == (0xFF - (sum & 0xFF));
 }
 
-size_t m68k_dump2mem(m68k_cpu *cpu, char **lines, size_t n)
+// flashed `n` `lines` (in srec format) to `cpu`'s mem
+//
+// returns the number of dumped lines until failure
+size_t m68k_memflash(m68k_cpu *cpu, char **lines, size_t n)
 {
     Record r = {0};
     size_t i = 0;
@@ -139,30 +159,81 @@ size_t m68k_dump2mem(m68k_cpu *cpu, char **lines, size_t n)
         if (!check_record(r))
             return i;
         
-        memcpy(cpu->mem + r.address, r.data, r.len);
-        free(r.data);
+        EMUL_MEMCPY(cpu->mem + r.address, r.data, r.len);
+        EMUL_FREE(r.data);
     }
 
     return i;
 }
 
-int m68k_flash(m68k_cpu *cpu, char **lines, size_t n)
+// tries to m68k_memflash `n` `lines` to `cpu`'s mem
+// on failure, mem is reset to 0
+//
+// returns if all lines have been dumped
+int m68k_trymemflash(m68k_cpu *cpu, char **lines, size_t n)
 {
-    size_t d = m68k_dump2mem(cpu, lines, n);
+    size_t d = m68k_memflash(cpu, lines, n);
 
     if (d != n)
     {
-        EMUL_LOG("Invalid record count dumped: %zu (expected %zu)\n", d, n);
-        memset(cpu->mem, 0, M68K_MEM);
+        EMUL_LOG("Invalid record count flashed: %zu (expected %zu)\n", d, n);
+        EMUL_MEMSET(cpu->mem, 0, M68K_MEM);
     }
 
     return d == n;
 }
 
-inline void m68k_get_vector(m68k_cpu *cpu)
+// set everything to 0 except memory
+void m68k_clear(m68k_cpu *cpu)
 {
+    uint8_t *mem = cpu->mem;
+    EMUL_MEMSET(cpu, 0, sizeof(m68k_cpu));
+    cpu->mem = mem;
 }
 
-inline void m68k_cycle(m68k_cpu *cpu)
+// sets SP and PC from vector table
+// see: https://wiki.neogeodev.org/index.php?title=68k_vector_table
+// 
+void m68k_reset(m68k_cpu *cpu)
 {
+    cpu->areg[7] = M68K_GET_U32(cpu, 0);
+    cpu->pc = M68K_GET_U32(cpu, 1);
+}
+
+// executes 1 instruction fetched from MEMORY[PC]
+// see: http://goldencrystal.free.fr/M68kOpcodes-v2.3.pdf
+// 
+void m68k_cycle(m68k_cpu *cpu)
+{
+    uint8_t up = M68K_GET_U8(cpu, cpu->pc);
+    uint8_t lo = M68K_GET_U8(cpu, cpu->pc);
+
+    // ORI to CC - MOVEP
+    if (up >> 4 == 0)
+    {
+        // BTST, BCHG, BCLR, BSET, MOVEP
+        if ((up & 0x0F) % 2 == 1)
+        {
+        }
+        else
+        {
+            switch (up & 0x0E)
+            {
+            case 0: // ORI
+                break;
+            case 2: // ANDI
+                break;
+            case 4: // SUBI
+                break;
+            case 6: // ADDI
+                break;
+            case 8: // BTST, BCHG, BCLR, BSET, MOVEP
+                break;
+            case 10: // EORI
+                break;
+            case 12: // CMPI
+                break;
+            }
+        }
+    }
 }
