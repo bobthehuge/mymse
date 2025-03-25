@@ -26,11 +26,13 @@
 #define SSR_TRACE(i)         ((i & SSR_T_MASK) >> 9)
 
 #ifndef EMUL_HTOBE32
-#    ifdef BIG_ENDIAN
+#    if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #        define EMUL_HTOBE32(x) (x)
+#        define EMUL_HTOBE16(x) (x)
 #    else
 #        include <byteswap.h>
 #        define EMUL_HTOBE32(x) bswap_32(x)
+#        define EMUL_HTOBE16(x) bswap_16(x)
 #    endif
 #endif
 
@@ -55,19 +57,34 @@
 #define EMUL_LOG(fmt, ...) printf(fmt, __VA_ARGS__)
 #endif
 
-typedef struct {
+typedef struct
+{
     uint32_t dreg[8];
     uint32_t areg[8];
     uint32_t pc;
     uint32_t ssp;
     uint32_t usp;
-    uint16_t ssr;
+    uint16_t sr;
     uint8_t *mem;
 } m68k_cpu;
 
-#define M68K_GET_U32(c, n) (*(uint32_t *)((c)->mem + (n) * 8))
-#define M68K_GET_U16(c, n) (*(uint16_t *)((c)->mem + (n) * 4))
-#define M68K_GET_U8(c, n) ((c)->mem[n])
+// n is a byte offset
+#define MEMGET_1B(m,n) ((m)[n])
+#define MEMGET_2B(m,n) ((uint16_t)(m)[n]<<8|(m)[(n)+1])
+#define MEMGET_4B(m,n) ((uint32_t)MEMGET_2B(m,n)<<16|MEMGET_2B(m,(n)+2))
+
+#define MEMSET_1B(m,n,x) ((m)[n]=(x))
+#define MEMSET_2B(m,n,x) {(m)[n]=(x)>>8;(m)[(n)+1]=((x)&255);}
+#define MEMSET_4B(m,n,x) {MEMSET_2B(m,n,(x)>>16);MEMSET_2B(m,(n)+2,(x)&65535)}
+
+// n is a unit offset (gets multiplied with unit size in bytes)
+#define MEMGET_U8(m,n) ((m)[n])
+#define MEMGET_U16(m,n) (EMUL_HTOBE16(*((uint16_t *)(m) + (n))))
+#define MEMGET_U32(m,n) (EMUL_HTOBE32(*((uint32_t *)(m) + (n))))
+
+#define MEMSET_U8(m,n,x) ((m)[n]=(x))
+#define MEMSET_U16(m,n,x) (*((uint16_t *)(m)+(n))=EMUL_HTOBE16(x))
+#define MEMSET_U32(m,n,x) (*((uint32_t *)(m)+(n))=EMUL_HTOBE32(x))
 
 // Records with type outside of [0-9] are errors
 // S4 records are also errors

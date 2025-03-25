@@ -51,6 +51,9 @@ void m68k_memdump(m68k_cpu *cpu, FILE *fd)
     }
 }
 
+// decodes and parses SREC char array to raw memory bytes
+// see: https://en.wikipedia.org/wiki/SREC_(file_format)
+//
 Record srec_decode(char *_d)
 {
     Record r = {
@@ -196,44 +199,247 @@ void m68k_clear(m68k_cpu *cpu)
 // 
 void m68k_reset(m68k_cpu *cpu)
 {
-    cpu->areg[7] = M68K_GET_U32(cpu, 0);
-    cpu->pc = M68K_GET_U32(cpu, 1);
+    cpu->areg[7] = MEMGET_U32(cpu->mem, 0);
+    cpu->pc = MEMGET_U32(cpu->mem, 1);
 }
+
+// decodes a Brief Extension Word instruction to an address offset
+// bew = 0bMXXXS000DDDDDDDD
+void m68k_resolve_brief(m68k_cpu *cpu, uint16_t bew, uint32_t *offset)
+{
+    uint8_t xn = (bew & 0x7000) >> 12;
+    uint8_t size = (bew & 0x0800) >> 11; // >>11 then x4 => >>9
+    int8_t disp = (bew & 0xFF);
+
+    uint32_t mask = size == 0 ? 0xFFFF : 0xFFFFFFFF;
+
+    uint32_t off = (bew & 0x8000) ? cpu->areg[xn] : cpu->dreg[xn];
+    off &= mask;
+
+    *offset += size ? (int32_t)off : (int16_t)off + disp;
+}
+
+// decodes an smxn instruction to a memory or a register address
+// smxn = 0bSSMMMXXX
+void m68k_resolve_xn(m68k_cpu *cpu, uint8_t smxn, uint32_t **addr)
+{
+    uint8_t xn = smxn & 7;
+    uint8_t mode = (smxn & 0x38) >> 3;
+    uint8_t size = (smxn & 0xC0) >> 5; // >>6 then x2 => >>5
+    uint32_t offset = 0;
+    
+    switch (mode)
+    {
+    case 0: // DREG
+        *addr = cpu->dreg + xn;
+        break;
+    case 1: // AREG
+        *addr = cpu->areg + xn;
+        break;
+    case 2: // ADDRESS
+        *addr = (uint32_t *)(cpu->mem + cpu->areg[xn]);
+        break;
+    case 3: // ADDRESS WITH POSTINCREMENT
+        // offset = cpu->areg[xn]++ * size;
+        *addr = (uint32_t *)(cpu->mem + cpu->areg[xn]++);
+        break;
+    case 4: // ADDRESS WITH PREDECREMENT
+        *addr = (uint32_t *)(cpu->mem + (--cpu->areg[xn]));
+        break;
+    case 5: // ADDRESS WITH DISPLACEMENT
+        *addr = (uint32_t *)(cpu->mem + cpu->areg[xn]
+            + (int16_t)MEMGET_2B(cpu->mem, cpu->pc));
+        cpu->pc += 2;
+        break;
+    case 6: // ADDRESS WITH INDEX
+        offset += cpu->areg[xn];
+        m68k_resolve_brief(cpu, MEMGET_2B(cpu->mem, cpu->pc), &offset);
+        cpu->pc += 2;
+        *addr = (uint32_t *)(cpu->mem + offset);
+        break;
+    case 7:
+        EMUL_LOG("%s:%d: Unsupported operation\n", __FILE__, __LINE__);
+        break;
+    }
+}
+
+void m68k_get(m68k_cpu *cpu, uint8_t s, uint32_t *imm)
+{
+    switch (s)
+    {
+    case 0:
+        *imm = MEMGET_1B(cpu->mem, cpu->pc);
+        cpu->pc += 1;
+        break;
+    case 1:
+        *imm = MEMGET_2B(cpu->mem, cpu->pc);
+        cpu->pc += 2;
+        break;
+    case 2:
+        *imm = MEMGET_4B(cpu->mem, cpu->pc);
+        cpu->pc += 4;
+        break;
+    default:
+        EMUL_LOG("%s:%d: Unsupported operation\n", __FILE__, __LINE__);
+        break;
+    }
+}
+
+void m68k_set(uint8_t *addr, uint8_t s, uint32_t v)
+{
+    switch (s)
+    {
+    case 0:
+        MEMSET_1B(addr, 0, (uint8_t)v);
+        break;
+    case 1:
+        MEMSET_2B(addr, 0, (uint16_t)v);
+        break;
+    case 2:
+        MEMSET_4B(addr, 0, v);
+        break;
+    default:
+        EMUL_LOG("%s:%d: Unsupported operation\n", __FILE__, __LINE__);
+        break;
+    }
+}
+
+void m68k_or(m68k_cpu *cpu, uint8_t up, uint8_t lo)
+{   
+    uint8_t s = (lo & 0xC0) >> 6;
+    uint8_t dn = (up & 0xE0) >> 4;
+
+    uint32_t source = cpu->dreg[dn];
+
+    uint32_t *addr = 0;
+    uint32_t target;
+
+    if (!up) // ORI
+    {
+        m68k_get(cpu, s, &source);
+        source = EMUL_HTOBE32(source);
+        m68k_resolve_xn(cpu, lo, &addr);
+    }
+    else
+    {
+        m68k_resolve_xn(cpu, lo, &addr);
+        target = *addr;
+
+        if (up & 1) // switch direction
+        {
+            target = source;
+            source = *addr;
+            addr = cpu->dreg + dn;
+        }
+    }
+
+    m68k_set((uint8_t *)addr, s, EMUL_HTOBE32(target | source));
+}
+
+// static inline void m68k_ori(m68k_cpu *cpu, uint8_t lo)
+// {
+//     uint32_t imm;
+//     uint8_t s = (lo & 0xC0) >> 6;
+//     m68k_get(cpu, s, &imm);
+    
+//     uint32_t *target = 0;
+//     m68k_resolve_xn(cpu, lo, &target);
+
+//     m68k_set((uint8_t *)target, s, EMUL_HTOBE32(*target) | imm);
+// }
 
 // executes 1 instruction fetched from MEMORY[PC]
 // see: http://goldencrystal.free.fr/M68kOpcodes-v2.3.pdf
 // 
 void m68k_cycle(m68k_cpu *cpu)
 {
-    uint8_t up = M68K_GET_U8(cpu, cpu->pc);
-    uint8_t lo = M68K_GET_U8(cpu, cpu->pc);
+    uint32_t pc = cpu->pc;
+    
+    uint8_t up = MEMGET_U8(cpu->mem, cpu->pc);
+    uint8_t lo = MEMGET_U8(cpu->mem, cpu->pc + 1);
 
-    // ORI to CC - MOVEP
-    if (up >> 4 == 0)
+    cpu->pc += 2;
+
+    switch (up >> 4)
     {
-        // BTST, BCHG, BCLR, BSET, MOVEP
-        if ((up & 0x0F) % 2 == 1)
+    case 0: // ORI to CC - MOVEP
         {
-        }
-        else
-        {
-            switch (up & 0x0E)
+            // BTST, BCHG, BCLR, BSET
+            if ((up & 0x0F) % 2 == 1)
             {
-            case 0: // ORI
-                break;
-            case 2: // ANDI
-                break;
-            case 4: // SUBI
-                break;
-            case 6: // ADDI
-                break;
-            case 8: // BTST, BCHG, BCLR, BSET, MOVEP
-                break;
-            case 10: // EORI
-                break;
-            case 12: // CMPI
-                break;
+            }
+            else
+            {
+                switch (up & 0x0E)
+                {
+                case 0: // ORI
+                    m68k_or(cpu, up, lo);
+                    break;
+                case 2: // ANDI
+                    break;
+                case 4: // SUBI
+                    break;
+                case 6: // ADDI
+                    break;
+                case 8: // BTST, BCHG, BCLR, BSET, MOVEP (immediate)
+                    break;
+                case 10: // EORI
+                    break;
+                case 12: // CMPI
+                    break;
+                }
             }
         }
+        break;
+    case 1: case 2: case 3: // MOVEA, MOVE
+        {
+        }
+        break;
+    case 4: // MOVE from SR - CHK
+        {
+            if (up == 0x4A && lo == 0xFC)
+                EMUL_LOG("illegal at '%06X'\n", cpu->pc);
+        }
+        break;
+    case 5: // ADDQ, SUBQ, Scc, DBcc
+        {
+        }
+        break;
+    case 6: // BRA, BSR, Bcc
+        {
+        }
+        break;
+    case 7: // MOVEQ
+        {
+        }
+        break;
+    case 8: // DIVU, DIVS, SBCD, OR 
+        {
+        }
+        break;
+    case 9: // SUB, SUBX, SUBA
+        {
+        }
+        break;
+    case 11: // EOR, CMPM, CMP, CMPA
+        {
+        }
+        break;
+    case 12: // MULU, MULS, ABCD, EXG, AND
+        {
+        }
+        break;
+    case 13: // ADDI, ADDX, ADDA
+        {
+        }
+        break;
+    case 14: // ASd, LSd, ROXd
+        {
+        }
+        break;
+    default:
+        EMUL_LOG("unknown instruction %04X at pc %06X\n",
+            (((uint16_t)up << 8) | lo), pc);
+        break;
     }
 }

@@ -44,10 +44,13 @@ char **getnlines(char *_buf, size_t *_n)
     char c = 0;
 
     if (!n)
+    {
+        n = 1;
         while ((c = *buf++))
             if (c == '\n')
                 n++;
-
+    }
+    
     buf = _buf;
 
     char **lines = BTH_STRING_ALLOC(n * sizeof(char *));
@@ -56,9 +59,12 @@ char **getnlines(char *_buf, size_t *_n)
         return NULL;
 
     lines[0] = buf;
+
+    while (*buf != '\n') { buf++; }
+    
     size_t n2 = 1;
 
-    while (n2 <= n && (c = *buf++))
+    while ((n2 < n) && (c = *buf++))
         if (c == '\n')
         {
             lines[n2] = buf;

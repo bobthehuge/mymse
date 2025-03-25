@@ -66,12 +66,13 @@ size_t readfn(char **buf, size_t n, const char *path)
 
     char *d = *buf;
     if (!d)
-        d = (char *)BTH_IO_ALLOC(len);
+        d = (char *)BTH_IO_ALLOC(len + 1);
 
-    size_t count = fread(d, 1, len, f) - 1;
+    size_t count = fread(d, 1, len, f);
+    
     fclose(f);
 
-    d[count] = 0;
+    d[len] = 0;
     *buf = d;
 
     return count;
