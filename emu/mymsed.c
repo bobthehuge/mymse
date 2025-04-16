@@ -27,23 +27,61 @@ int main(void)
     m68k_reset(&CPU);
 
     m68k_cycle(&CPU); // move.l ..,d3
-    CPU.dreg[3] = 0xCAFE0ABE;
-    CPU.pc += 4; // cafebabe
+    m68k_cycle(&CPU); // move.w d4,a0
     m68k_cycle(&CPU); // move.l ..,d4
-    CPU.dreg[4] = 4;
-    CPU.pc += 4; // 00000004
-    m68k_cycle(&CPU); // btst.l d4,d3
-    m68k_cycle(&CPU); // btst.l ..,d3
-    CPU.pc += 2; // 0004
+    // m68k_cycle(&CPU); // btst.l d4,d3
+    // m68k_cycle(&CPU); // btst.l ..,d3
+    // CPU.pc = BSWAP32(BSWAP32(CPU.pc) + 2);
     m68k_cycle(&CPU); // ori
     m68k_cycle(&CPU); // ori
+
+    m68k_cycle(&CPU); // move.l ..,d2
+    m68k_cycle(&CPU); // move.l ..,d1
+    m68k_cycle(&CPU); // or.l d1,d2
+
+    m68k_cycle(&CPU); // andi
+    m68k_cycle(&CPU); // andi
+
+    m68k_cycle(&CPU); // move.l ..,d4
+    m68k_cycle(&CPU); // move.l ..,d1
+    m68k_cycle(&CPU); // and.l d4,d1
+
     m68k_cycle(&CPU); // illegal
 
+    printf("\n");
+    printf("d0: %08X  d1: %08X  d2: %08X  d3: %08X\n",
+        BSWAP32(CPU.dreg[0]),
+        BSWAP32(CPU.dreg[1]),
+        BSWAP32(CPU.dreg[2]),
+        BSWAP32(CPU.dreg[3])
+    );
+    printf("d4: %08X  d5: %08X  d6: %08X  d7: %08X\n",
+        BSWAP32(CPU.dreg[4]),
+        BSWAP32(CPU.dreg[5]),
+        BSWAP32(CPU.dreg[6]),
+        BSWAP32(CPU.dreg[7])
+    );
+
+    printf("\n");
+    printf("a0: %08X  a1: %08X  a2: %08X  a3: %08X\n",
+        BSWAP32(CPU.areg[0]),
+        BSWAP32(CPU.areg[1]),
+        BSWAP32(CPU.areg[2]),
+        BSWAP32(CPU.areg[3])
+    );
+    printf("a4: %08X  a5: %08X  a6: %08X  a7: %08X\n",
+        BSWAP32(CPU.areg[4]),
+        BSWAP32(CPU.areg[5]),
+        BSWAP32(CPU.areg[6]),
+        BSWAP32(CPU.areg[7])
+    );
+
+    printf("\n");
+    printf("PC: %08X\n", BSWAP32(CPU.pc));
+    
     FILE *fd = fopen("dump", "w+");
     m68k_memdump(&CPU, fd);
     fclose(fd);
-
-    printf("%08X\n", MEMGET_2B(CPU.mem, 0xac4));
 
     free(lines);
     free(text);

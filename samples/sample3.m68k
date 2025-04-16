@@ -5,14 +5,23 @@ Vector_001    dc.l    main
 
 main
               move.l #$cafe0abe,d3
+              move.w d3,a0
               move.l #4,d4
-              btst.l d4,d3
-              btst.l #4,d3
+              ; btst.l d4,d3
+              ; btst.l #4,d3
 
-              ori.l #$89abcdef,$550(a0)
+              ori.l #$89abcdef,$6(a0)
               ori.w #$cdef,6(a0,d3.w)
 
-              illegal
+              move.l #$0f0f0f0f,d2
+              move.l #$f0f0f0f0,d1
+              or.b d1,d2
 
-; 0011 1000 0111 1111
-; 0011 0000 0111 1111
+              andi.l #$ffff0f00,$550(a0)
+              andi.w #$cdef,6(a0,d3.w)
+
+              move.l #$cafebabe,d4
+              move.l #$f0f0f0f0,d1
+              and.l d4,d1
+              
+              illegal

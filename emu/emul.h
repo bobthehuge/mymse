@@ -25,14 +25,14 @@
 #define SSR_SUPERVISOR(i)    ((i & SSR_S_MASK) >> 8)
 #define SSR_TRACE(i)         ((i & SSR_T_MASK) >> 9)
 
-#ifndef EMUL_HTOBE32
+#ifndef BSWAP32
 #    if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-#        define EMUL_HTOBE32(x) (x)
-#        define EMUL_HTOBE16(x) (x)
+#        define BSWAP32(x) (x)
+#        define BSWAP16(x) (x)
 #    else
 #        include <byteswap.h>
-#        define EMUL_HTOBE32(x) bswap_32(x)
-#        define EMUL_HTOBE16(x) bswap_16(x)
+#        define BSWAP32(x) bswap_32(x)
+#        define BSWAP16(x) bswap_16(x)
 #    endif
 #endif
 
@@ -61,6 +61,7 @@ typedef struct
 {
     uint32_t dreg[8];
     uint32_t areg[8];
+    uint32_t pc_cur;
     uint32_t pc;
     uint32_t ssp;
     uint32_t usp;
@@ -75,16 +76,23 @@ typedef struct
 
 #define MEMSET_1B(m,n,x) ((m)[n]=(x))
 #define MEMSET_2B(m,n,x) {(m)[n]=(x)>>8;(m)[(n)+1]=((x)&255);}
-#define MEMSET_4B(m,n,x) {MEMSET_2B(m,n,(x)>>16);MEMSET_2B(m,(n)+2,(x)&65535)}
+#define MEMSET_4B(m,n,x) {MEMSET_2B(m,n,(x)>>16);MEMSET_2B(m,(n)+2,(x)&65535);}
 
 // n is a unit offset (gets multiplied with unit size in bytes)
 #define MEMGET_U8(m,n) ((m)[n])
-#define MEMGET_U16(m,n) (EMUL_HTOBE16(*((uint16_t *)(m) + (n))))
-#define MEMGET_U32(m,n) (EMUL_HTOBE32(*((uint32_t *)(m) + (n))))
+#define MEMGET_U16(m,n) (BSWAP16(*((uint16_t *)(m) + (n))))
+#define MEMGET_U32(m,n) (BSWAP32(*((uint32_t *)(m) + (n))))
 
 #define MEMSET_U8(m,n,x) ((m)[n]=(x))
-#define MEMSET_U16(m,n,x) (*((uint16_t *)(m)+(n))=EMUL_HTOBE16(x))
-#define MEMSET_U32(m,n,x) (*((uint32_t *)(m)+(n))=EMUL_HTOBE32(x))
+#define MEMSET_U16(m,n,x) (*((uint16_t *)(m)+(n))=BSWAP16(x))
+#define MEMSET_U32(m,n,x) (*((uint32_t *)(m)+(n))=BSWAP32(x))
+
+#define ISDREGADDR(c,a) ((a)>=(c)->dreg && (a) - (c)->dreg < 8)
+#define ISAREGADDR(c,a) ((a)>=(c)->areg && (a) - (c)->areg < 8)
+#define ISMEMADDR(c,a) ((a)>=(c)->mem&&(a)-(c)->mem<M68K_MEM)
+
+#define ISU32ADDR(c,a) \
+    (ISDREGADDR(c,a)|ISAREGADDR(c,a)|ISMEMADDR(c,((uint8_t*)a)))
 
 // Records with type outside of [0-9] are errors
 // S4 records are also errors

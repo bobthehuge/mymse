@@ -1,5 +1,5 @@
 CC = clang
-CRELFLAGS = -std=c99
+CRELFLAGS = -std=c99 -O0
 CDEVFLAGS = -std=c99 -g
 LDLIBS =
 
