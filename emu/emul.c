@@ -282,8 +282,7 @@ void m68k_resolve_brief(m68k_cpu *cpu, uint16_t bew, uint32_t *offset)
 
     uint32_t mask = size == 0 ? 0xFFFF : 0xFFFFFFFF;
 
-    uint32_t off = (bew & 0x8000) ? cpu->areg[xn] : cpu->dreg[xn];
-    // off = EMUL_HTOBE32(off);
+    uint32_t off = (bew & 0x8000) ? A(cpu, xn) : D(cpu, xn);
     off &= mask;
 
     *offset += size ? (int32_t)off : (int16_t)off + disp;
@@ -310,7 +309,6 @@ void m68k_resolve_xn(m68k_cpu *cpu, uint8_t smxn, uint8_t **addr)
         *addr = cpu->mem + A(cpu, xn);
         break;
     case 3: // ADDRESS WITH POSTINCREMENT
-        // offset = cpu->areg[xn]++ * size;
         *addr = cpu->mem + A(cpu, xn);
         cpu->areg[xn] = BSWAP32(A(cpu, xn) + 1);
         break;
@@ -357,108 +355,6 @@ void m68k_resolve_xn(m68k_cpu *cpu, uint8_t smxn, uint8_t **addr)
     default:
         EMUL_LOG("%s:%d: UNREACHABLE (\?)\n", __FILE__, __LINE__);
     }
-}
-
-void m68k_or(m68k_cpu *cpu, uint8_t up, uint8_t lo)
-{
-    uint8_t s = (lo & 0xC0) >> 6;
-    uint8_t dn = (up & 0xE) >> 1;
-
-    uint8_t *dst = 0;
-    uint32_t opeval;
-    uint32_t dstval;
-
-    if (up == 0) // ORI
-    {
-        m68k_get_pc(cpu, s, &opeval);
-        PC_INC(cpu, 1 << s);
-        m68k_resolve_xn(cpu, lo, &dst);
-        m68k_get(dst, s, &dstval);
-    }
-    else
-    {
-        dst = (uint8_t *)(cpu->dreg + dn) + BYTEOFFSET(s);
-        uint8_t *ope;
-        m68k_resolve_xn(cpu, lo, &ope);
-
-        m68k_get(ope, s, &opeval);
-        m68k_get(dst, s, &dstval);
-
-        if (up & 1) // switch direction
-        {
-            opeval ^= dstval;
-            dstval ^= opeval;
-            opeval ^= dstval;
-            dst = ope;
-        }
-    }
-
-    if (ISAREG(cpu, dst))
-    {
-        EMUL_LOG("INV AND of size %d caught at %06X\n",
-            1 << s, cpu->pc_cur);
-        return;
-    }
-    else if (!ISDREG(cpu, dst) && !ISMEMADDR(cpu, dst))
-    {
-        EMUL_LOG("OOB write of size %d caught at %06X\n",
-            1 << s, cpu->pc_cur);
-        return;
-    }
-
-    uint32_t value = dstval | opeval;
-    m68k_set(dst, s, value);
-}
-
-void m68k_and(m68k_cpu *cpu, uint8_t up, uint8_t lo)
-{   
-    uint8_t s = (lo & 0xC0) >> 6;
-    uint8_t dn = (up & 0xE) >> 1;
-
-    uint8_t *dst = 0;
-    uint32_t opeval;
-    uint32_t dstval;
-
-    if (up == 2) // ANDI
-    {
-        m68k_get_pc(cpu, s, &opeval);
-        PC_INC(cpu, 1 << s);
-        m68k_resolve_xn(cpu, lo, &dst);
-        m68k_get(dst, s, &dstval);
-    }
-    else
-    {
-        dst = (uint8_t *)(cpu->dreg + dn) + BYTEOFFSET(s);
-        uint8_t *ope;
-        m68k_resolve_xn(cpu, lo, &ope);
-
-        m68k_get(ope, s, &opeval);
-        m68k_get(dst, s, &dstval);
-
-        if (up & 1) // switch direction
-        {
-            opeval ^= dstval;
-            dstval ^= opeval;
-            opeval ^= dstval;
-            dst = ope;
-        }
-    }
-
-    if (ISAREG(cpu, dst))
-    {
-        EMUL_LOG("INV AND of size %d caught at %06X\n",
-            1 << s, cpu->pc_cur);
-        return;
-    }
-    else if (!ISDREG(cpu, dst) && !ISMEMADDR(cpu, dst))
-    {
-        EMUL_LOG("OOB write of size %d caught at %06X\n",
-            1 << s, cpu->pc_cur);
-        return;
-    }
-
-    uint32_t value = opeval & dstval;
-    m68k_set(dst, s, value);
 }
 
 void m68k_logic(m68k_cpu *cpu, uint8_t up, uint8_t lo, LOGOPE ope)
@@ -541,9 +437,6 @@ void m68k_move(m68k_cpu *cpu, uint8_t up, uint8_t lo)
     uint8_t *dst;
     m68k_resolve_xn(cpu, dst_smxn, &dst);
 
-    // uint8_t *srcaddr = (uint8_t *)src;
-    // uint8_t *dstaddr = (uint8_t *)dst;
-
     if (ISAREG(cpu, dst) || ISDREG(cpu, dst))
     {
         if (ISAREG(cpu, dst) && s == 0)
@@ -552,7 +445,6 @@ void m68k_move(m68k_cpu *cpu, uint8_t up, uint8_t lo)
                 1 << s, cpu->pc_cur);
             return;
         }
-        // dstaddr += s < 2 ? 3 - s : 0;
         dst += BYTEOFFSET(s);
     }
     else if (!ISMEMADDR(cpu, dst))
@@ -564,7 +456,6 @@ void m68k_move(m68k_cpu *cpu, uint8_t up, uint8_t lo)
 
     if (ISAREG(cpu, src) || ISDREG(cpu, src))
     {
-        // srcaddr += s < 2 ? 3 - s : 0;
         src += BYTEOFFSET(s);
     }
     else if (!ISMEMADDR(cpu, src))
