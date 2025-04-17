@@ -489,30 +489,31 @@ void m68k_cycle(m68k_cpu *cpu)
             // BTST, BCHG, BCLR, BSET
             if ((up & 0x0F) % 2 == 1)
             {
+                break;
             }
-            else
+
+            switch (up & 0x0E)
             {
-                switch (up & 0x0E)
-                {
-                case 0: // ORI
-                    EMUL_LOG("ORI at '%06X'\n", cpu->pc_cur);
-                    m68k_logic(cpu, up, lo, OPE_OR);
-                    break;
-                case 2: // ANDI
-                    EMUL_LOG("ANDI at '%06X'\n", cpu->pc_cur);
-                    m68k_logic(cpu, up, lo, OPE_AND);
-                    break;
-                case 4: // SUBI
-                    break;
-                case 6: // ADDI
-                    break;
-                case 8: // BTST, BCHG, BCLR, BSET, MOVEP (immediate)
-                    break;
-                case 10: // EORI
-                    break;
-                case 12: // CMPI
-                    break;
-                }
+            case 0: // ORI
+                EMUL_LOG("ORI at '%06X'\n", cpu->pc_cur);
+                m68k_logic(cpu, up, lo, OPE_OR);
+                break;
+            case 2: // ANDI
+                EMUL_LOG("ANDI at '%06X'\n", cpu->pc_cur);
+                m68k_logic(cpu, up, lo, OPE_AND);
+                break;
+            case 4: // SUBI
+                break;
+            case 6: // ADDI
+                break;
+            case 8: // BTST, BCHG, BCLR, BSET, MOVEP (immediate)
+                break;
+            case 10: // EORI
+                EMUL_LOG("ANDI at '%06X'\n", cpu->pc_cur);
+                m68k_logic(cpu, up, lo, OPE_EOR);
+                break;
+            case 12: // CMPI
+                break;
             }
         }
         break;
@@ -525,7 +526,10 @@ void m68k_cycle(m68k_cpu *cpu)
     case 4: // MOVE from SR - CHK
         {
             if (up == 0x4A && lo == 0xFC)
+            {
                 EMUL_LOG("ILLEGAL at '%06X'\n", cpu->pc_cur);
+                break;
+            }
         }
         break;
     case 5: // ADDQ, SUBQ, Scc, DBcc
@@ -545,15 +549,21 @@ void m68k_cycle(m68k_cpu *cpu)
             if ((up & 1) && (lo >> 3) <= 2)
             {
                 if ((lo >> 6) == 3) // DIVU / DIVS
+                {
                     EMUL_LOG("DIVU/S at '%06X'\n", cpu->pc_cur);
+                    break;
+                }
                 if ((lo >> 3) <= 2) // SBCD
+                {
                     EMUL_LOG("SBCD at '%06X'\n", cpu->pc_cur);
+                    break;
+                }
+                break;
             }
-            else // OR
-            {
-                EMUL_LOG("OR at '%06X'\n", cpu->pc_cur);
-                m68k_logic(cpu, up, lo, OPE_OR);
-            }
+
+            // OR
+            EMUL_LOG("OR at '%06X'\n", cpu->pc_cur);
+            m68k_logic(cpu, up, lo, OPE_OR);
         }
         break;
     case 9: // SUB, SUBX, SUBA
@@ -562,6 +572,28 @@ void m68k_cycle(m68k_cpu *cpu)
         break;
     case 11: // EOR, CMPM, CMP, CMPA
         {
+            if ((lo >> 6) == 3) // CMPA
+            {
+                EMUL_LOG("CMPA at '%06X'\n", cpu->pc_cur);
+                break;
+            }
+
+            if (up & 1)
+            {
+                if (((lo >> 3) & 3) == 1) // CMPM
+                {
+                    EMUL_LOG("CMPM at '%06X'\n", cpu->pc_cur);
+                }
+                else // EOR
+                {
+                    EMUL_LOG("EOR at '%06X'\n", cpu->pc_cur);
+                    m68k_logic(cpu, up, lo, OPE_EOR);
+                }
+                break;
+            }
+
+            // CMP
+            EMUL_LOG("CMP at '%06X'\n", cpu->pc_cur);
         }
         break;
     case 12: // MULU, MULS, ABCD, EXG, AND
