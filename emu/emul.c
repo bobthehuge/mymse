@@ -5,6 +5,13 @@
 #define A(c,x) (BSWAP32((c)->areg[x]))
 #define D(c,x) (BSWAP32((c)->dreg[x]))
 
+typedef enum
+{
+    OPE_OR,
+    OPE_AND,
+    OPE_EOR,
+} LOGOPE;
+
 // decode ascii hex `data` and returns decoded raw hex
 // results is `n` / 2 bytes long and allocated using calloc
 static inline uint8_t *strndecode(const char *data, int n)
@@ -294,10 +301,10 @@ void m68k_resolve_xn(m68k_cpu *cpu, uint8_t smxn, uint8_t **addr)
     switch (mode)
     {
     case 0: // DREG
-        *addr = (uint8_t *)(cpu->dreg + xn) + (size < 2 ? 3 - size : 0);
+        *addr = (uint8_t *)(cpu->dreg + xn) + BYTEOFFSET(size);
         break;
     case 1: // AREG
-        *addr = (uint8_t *)(cpu->areg + xn) + (size < 2 ? 3 - size : 0);
+        *addr = (uint8_t *)(cpu->areg + xn) + BYTEOFFSET(size);
         break;
     case 2: // ADDRESS
         *addr = cpu->mem + A(cpu, xn);
@@ -357,52 +364,50 @@ void m68k_or(m68k_cpu *cpu, uint8_t up, uint8_t lo)
     uint8_t s = (lo & 0xC0) >> 6;
     uint8_t dn = (up & 0xE) >> 1;
 
-    uint32_t target = cpu->dreg[dn];
-
     uint8_t *dst = 0;
-    uint32_t source;
+    uint32_t opeval;
+    uint32_t dstval;
 
     if (up == 0) // ORI
     {
-        m68k_get_pc(cpu, s, &source);
+        m68k_get_pc(cpu, s, &opeval);
         PC_INC(cpu, 1 << s);
         m68k_resolve_xn(cpu, lo, &dst);
+        m68k_get(dst, s, &dstval);
     }
     else
     {
-        m68k_resolve_xn(cpu, lo, &dst);
-        source = *dst;
-        dst = cpu->dreg + dn;
+        dst = (uint8_t *)(cpu->dreg + dn) + BYTEOFFSET(s);
+        uint8_t *ope;
+        m68k_resolve_xn(cpu, lo, &ope);
+
+        m68k_get(ope, s, &opeval);
+        m68k_get(dst, s, &dstval);
 
         if (up & 1) // switch direction
         {
-            target = source;
-            source = *dst;
+            opeval ^= dstval;
+            dstval ^= opeval;
+            opeval ^= dstval;
+            dst = ope;
         }
     }
 
-    uint8_t *dstaddr = (uint8_t *)dst;
-    
-    if (ISAREGADDR(cpu, dst))
+    if (ISAREG(cpu, dst))
     {
         EMUL_LOG("INV AND of size %d caught at %06X\n",
             1 << s, cpu->pc_cur);
         return;
     }
-    else if (ISDREGADDR(cpu, dst))
-    {
-        dstaddr += s < 2 ? 3 - s : 0;
-    }
-    else if (!ISMEMADDR(cpu, dstaddr))
+    else if (!ISDREG(cpu, dst) && !ISMEMADDR(cpu, dst))
     {
         EMUL_LOG("OOB write of size %d caught at %06X\n",
             1 << s, cpu->pc_cur);
         return;
     }
 
-    uint32_t value = target | source;
-
-    m68k_set(dstaddr, s, value);
+    uint32_t value = dstval | opeval;
+    m68k_set(dst, s, value);
 }
 
 void m68k_and(m68k_cpu *cpu, uint8_t up, uint8_t lo)
@@ -410,53 +415,117 @@ void m68k_and(m68k_cpu *cpu, uint8_t up, uint8_t lo)
     uint8_t s = (lo & 0xC0) >> 6;
     uint8_t dn = (up & 0xE) >> 1;
 
-    uint32_t target = cpu->dreg[dn];
-
-    uint32_t *dst = 0;
-    uint32_t source;
+    uint8_t *dst = 0;
+    uint32_t opeval;
+    uint32_t dstval;
 
     if (up == 2) // ANDI
     {
-        m68k_get_pc(cpu, s, &source);
-        // cpu->pc = BSWAP32(PC(cpu) + (1 << s));
+        m68k_get_pc(cpu, s, &opeval);
         PC_INC(cpu, 1 << s);
         m68k_resolve_xn(cpu, lo, &dst);
+        m68k_get(dst, s, &dstval);
     }
     else
     {
-        m68k_resolve_xn(cpu, lo, &dst);
-        source = *dst;
-        dst = cpu->dreg + dn;
+        dst = (uint8_t *)(cpu->dreg + dn) + BYTEOFFSET(s);
+        uint8_t *ope;
+        m68k_resolve_xn(cpu, lo, &ope);
+
+        m68k_get(ope, s, &opeval);
+        m68k_get(dst, s, &dstval);
 
         if (up & 1) // switch direction
         {
-            target = source;
-            source = *dst;
+            opeval ^= dstval;
+            dstval ^= opeval;
+            opeval ^= dstval;
+            dst = ope;
         }
     }
 
-    uint8_t *dstaddr = (uint8_t *)dst;
-    
-    if (ISDREGADDR(cpu, dst))
-    {
-        dstaddr += s < 2 ? 3 - s : 0;
-    }
-    else if (ISAREGADDR(cpu, dst))
+    if (ISAREG(cpu, dst))
     {
         EMUL_LOG("INV AND of size %d caught at %06X\n",
             1 << s, cpu->pc_cur);
         return;
     }
-    else if (!ISMEMADDR(cpu, dstaddr))
+    else if (!ISDREG(cpu, dst) && !ISMEMADDR(cpu, dst))
     {
         EMUL_LOG("OOB write of size %d caught at %06X\n",
             1 << s, cpu->pc_cur);
         return;
     }
 
-    uint32_t value = target & source;
+    uint32_t value = opeval & dstval;
+    m68k_set(dst, s, value);
+}
 
-    m68k_set(dstaddr, s, BSWAP32(value));
+void m68k_logic(m68k_cpu *cpu, uint8_t up, uint8_t lo, LOGOPE ope)
+{   
+    uint8_t s = (lo & 0xC0) >> 6;
+    uint8_t dn = (up & 0xE) >> 1;
+
+    uint8_t *dst = 0;
+    uint32_t opeval;
+    uint32_t dstval;
+
+    if (up <= 0xA) // immediate
+    {
+        m68k_get_pc(cpu, s, &opeval);
+        PC_INC(cpu, 1 << s);
+        m68k_resolve_xn(cpu, lo, &dst);
+        m68k_get(dst, s, &dstval);
+    }
+    else
+    {
+        dst = (uint8_t *)(cpu->dreg + dn) + BYTEOFFSET(s);
+        uint8_t *ope;
+        m68k_resolve_xn(cpu, lo, &ope);
+
+        m68k_get(ope, s, &opeval);
+        m68k_get(dst, s, &dstval);
+
+        if (up & 1) // switch direction
+        {
+            opeval ^= dstval;
+            dstval ^= opeval;
+            opeval ^= dstval;
+            dst = ope;
+        }
+    }
+
+    if (ISAREG(cpu, dst))
+    {
+        EMUL_LOG("INV operation of size %d caught at %06X\n",
+            1 << s, cpu->pc_cur);
+        return;
+    }
+    else if (!ISDREG(cpu, dst) && !ISMEMADDR(cpu, dst))
+    {
+        EMUL_LOG("OOB write of size %d caught at %06X\n",
+            1 << s, cpu->pc_cur);
+        return;
+    }
+
+    uint32_t value;
+
+    switch (ope)
+    {
+        case OPE_OR:
+            value = opeval | dstval;
+            break;
+        case OPE_AND:
+            value = opeval & dstval;
+            break;
+        case OPE_EOR:
+            value = opeval ^ dstval;
+            break;
+        default:
+            EMUL_LOG("UNS operation caught at %06X\n", cpu->pc_cur);
+    }
+
+    m68k_set(dst, s, value);
 }
 
 void m68k_move(m68k_cpu *cpu, uint8_t up, uint8_t lo)
@@ -466,37 +535,39 @@ void m68k_move(m68k_cpu *cpu, uint8_t up, uint8_t lo)
         (((up >> 1) & 7) | ((lo & 0xC0) >> 3) | (up & 1) << 5);
     uint8_t src_smxn = (s << 6) | lo;
 
-    uint32_t *src;
+    uint8_t *src;
     m68k_resolve_xn(cpu, src_smxn, &src);
     
-    uint32_t *dst;
+    uint8_t *dst;
     m68k_resolve_xn(cpu, dst_smxn, &dst);
 
-    uint8_t *srcaddr = (uint8_t *)src;
-    uint8_t *dstaddr = (uint8_t *)dst;
+    // uint8_t *srcaddr = (uint8_t *)src;
+    // uint8_t *dstaddr = (uint8_t *)dst;
 
-    if (ISAREGADDR(cpu, dst) || ISDREGADDR(cpu, dst))
+    if (ISAREG(cpu, dst) || ISDREG(cpu, dst))
     {
-        if (ISAREGADDR(cpu, dst) && s == 0)
+        if (ISAREG(cpu, dst) && s == 0)
         {
             EMUL_LOG("INV write of size %d caught at %06X\n",
                 1 << s, cpu->pc_cur);
             return;
         }
-        dstaddr += s < 2 ? 3 - s : 0;
+        // dstaddr += s < 2 ? 3 - s : 0;
+        dst += BYTEOFFSET(s);
     }
-    else if (!ISMEMADDR(cpu, dstaddr))
+    else if (!ISMEMADDR(cpu, dst))
     {
         EMUL_LOG("OOB write of size %d caught at %06X\n",
             1 << s, cpu->pc_cur);
         return;
     }
 
-    if (ISAREGADDR(cpu, src) || ISDREGADDR(cpu, src))
+    if (ISAREG(cpu, src) || ISDREG(cpu, src))
     {
-        srcaddr += s < 2 ? 3 - s : 0;
+        // srcaddr += s < 2 ? 3 - s : 0;
+        src += BYTEOFFSET(s);
     }
-    else if (!ISMEMADDR(cpu, srcaddr))
+    else if (!ISMEMADDR(cpu, src))
     {
         EMUL_LOG("OOB read of size %d caught at %06X\n",
             1 << s, cpu->pc_cur);
@@ -504,8 +575,8 @@ void m68k_move(m68k_cpu *cpu, uint8_t up, uint8_t lo)
     }
 
     uint32_t srcval;
-    m68k_get(srcaddr, s, &srcval);
-    m68k_set(dstaddr, s, srcval);
+    m68k_get(src, s, &srcval);
+    m68k_set(dst, s, srcval);
 }
 
 // executes 1 instruction fetched from MEMORY[PC]
@@ -534,11 +605,11 @@ void m68k_cycle(m68k_cpu *cpu)
                 {
                 case 0: // ORI
                     EMUL_LOG("ORI at '%06X'\n", cpu->pc_cur);
-                    m68k_or(cpu, up, lo);
+                    m68k_logic(cpu, up, lo, OPE_OR);
                     break;
                 case 2: // ANDI
                     EMUL_LOG("ANDI at '%06X'\n", cpu->pc_cur);
-                    m68k_and(cpu, up, lo);
+                    m68k_logic(cpu, up, lo, OPE_AND);
                     break;
                 case 4: // SUBI
                     break;
@@ -590,7 +661,7 @@ void m68k_cycle(m68k_cpu *cpu)
             else // OR
             {
                 EMUL_LOG("OR at '%06X'\n", cpu->pc_cur);
-                m68k_or(cpu, up, lo);
+                m68k_logic(cpu, up, lo, OPE_OR);
             }
         }
         break;
@@ -605,7 +676,7 @@ void m68k_cycle(m68k_cpu *cpu)
     case 12: // MULU, MULS, ABCD, EXG, AND
         {
             EMUL_LOG("AND at '%06X'\n", cpu->pc_cur);
-            m68k_and(cpu, up, lo);
+            m68k_logic(cpu, up, lo, OPE_AND);
         }
         break;
     case 13: // ADDI, ADDX, ADDA

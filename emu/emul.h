@@ -1,4 +1,5 @@
 #pragma once
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,12 +88,18 @@ typedef struct
 #define MEMSET_U16(m,n,x) (*((uint16_t *)(m)+(n))=BSWAP16(x))
 #define MEMSET_U32(m,n,x) (*((uint32_t *)(m)+(n))=BSWAP32(x))
 
-#define ISDREGADDR(c,a) ((a)>=(c)->dreg && (a) - (c)->dreg < 8)
-#define ISAREGADDR(c,a) ((a)>=(c)->areg && (a) - (c)->areg < 8)
+// #define ISDREGADDR(c,a) ((a)>=(c)->dreg && (a) - (c)->dreg < 32)
+// #define ISAREGADDR(c,a) ((a)>=(c)->areg && (a) - (c)->areg < 32)
 #define ISMEMADDR(c,a) ((a)>=(c)->mem&&(a)-(c)->mem<M68K_MEM)
 
-#define ISU32ADDR(c,a) \
-    (ISDREGADDR(c,a)|ISAREGADDR(c,a)|ISMEMADDR(c,((uint8_t*)a)))
+#define PTRDIFF(a,b) ((ptrdiff_t)((char *)(a) - (char *)(b)))
+#define ISDREG(c,a) (PTRDIFF(a, (c)->dreg) >= 0 && PTRDIFF(a, (c)->dreg) < 32)
+#define ISAREG(c,a) (PTRDIFF(a, (c)->areg) >= 0 && PTRDIFF(a, (c)->areg) < 32)
+
+// #define ISU32ADDR(c,a) \
+//     (ISDREGADDR(c,a)|ISAREGADDR(c,a)|ISMEMADDR(c,((uint8_t*)a)))
+
+#define BYTEOFFSET(s) ((s) < 2 ? 3 - (s) : 0)
 
 // Records with type outside of [0-9] are errors
 // S4 records are also errors
